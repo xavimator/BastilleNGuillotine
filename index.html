@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bastille &amp; Guillotine</title>
+<style>
+  :root {
+    --bg: #0c0a09;
+    --panel: #1c1917;
+    --light-sq: #44403c;
+    --dark-sq: #292524;
+    --border: #44403c;
+    --amber: #fcd34d;
+    --amber-dim: #fcd34d99;
+    --grey: #a8a29e;
+    --red: #f87171;
+    --text: #d6d3d1;
+    --muted: #78716c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, 'Times New Roman', serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px;
+  }
+  header { text-align: center; margin-bottom: 14px; }
+  .eyebrow {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.3em; color: var(--muted);
+  }
+  h1 {
+    font-size: 2rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 4px 0; color: #e7e5e4;
+  }
+  .subtitle { font-size: 0.9rem; color: var(--muted); font-style: italic; margin: 0; }
+
+  /* ---------- Lobby ---------- */
+  .lobby {
+    background: var(--panel); border: 1px solid #44403c; border-radius: 8px;
+    padding: 20px; max-width: 360px; width: 100%; text-align: center;
+  }
+  .lobby h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 12px; color: #e7e5e4; }
+  .lobby p { font-size: 0.8rem; color: var(--muted); margin: 4px 0 14px; }
+  .lobby .divider { margin: 18px 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--muted); }
+  .lobby input {
+    width: 100%; padding: 8px 10px; background: #292524; border: 1px solid #44403c;
+    border-radius: 4px; color: var(--text); font-family: inherit; font-size: 1rem;
+    text-align: center; text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 8px;
+  }
+  .lobby .error { color: var(--red); font-size: 0.8rem; margin-top: 8px; }
+
+  /* ---------- Game header ---------- */
+  .room-info {
+    display: flex; gap: 10px; align-items: center; justify-content: center;
+    font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .room-info .code {
+    background: var(--panel); border: 1px solid #44403c; border-radius: 4px;
+    padding: 2px 8px; letter-spacing: 0.2em; color: var(--amber); font-weight: bold;
+  }
+  .room-info .role { text-transform: uppercase; letter-spacing: 0.1em; }
+  .room-info .role.pueblo { color: var(--amber); }
+  .room-info .role.corte { color: var(--grey); }
+
+  .waiting {
+    margin-top: 10px; font-size: 0.85rem; color: var(--muted); text-align: center;
+  }
+  .waiting .dots::after {
+    content: '...'; animation: dots 1.4s steps(4, end) infinite;
+  }
+  @keyframes dots {
+    0%, 20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80%, 100% { content: '...'; }
+  }
+
+  .turn-banner {
+    margin-bottom: 12px; padding: 4px 16px; border-radius: 999px; font-size: 0.85rem;
+    text-transform: uppercase; letter-spacing: 0.2em; border: 1px solid var(--muted);
+  }
+  .turn-banner.pueblo { border-color: var(--amber); color: var(--amber); }
+  .turn-banner.corte { border-color: var(--grey); color: var(--grey); }
+  .turn-banner.mine { box-shadow: 0 0 0 1px currentColor; }
+
+  .promo-notice {
+    margin-bottom: 12px; padding: 8px 16px; background: var(--panel);
+    border: 1px solid var(--amber-dim); border-radius: 6px; font-size: 0.85rem;
+    text-align: center; max-width: 360px;
+  }
+
+  .board-wrap { position: relative; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    border: 2px solid var(--border);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  }
+  .sq {
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none; position: relative;
+  }
+  @media (min-width: 480px) {
+    .sq { width: 52px; height: 52px; }
+  }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark { background: var(--dark-sq); }
+  .sq.selected { box-shadow: inset 0 0 0 3px var(--amber); }
+  .sq.last { box-shadow: inset 0 0 0 1px rgba(214,211,209,0.4); }
+  .sq.selected.last { box-shadow: inset 0 0 0 3px var(--amber); }
+
+  .piece {
+    font-size: 1.6rem; line-height: 1;
+  }
+  @media (min-width: 480px) {
+    .piece { font-size: 2rem; }
+  }
+  .piece.pueblo { color: var(--amber); filter: drop-shadow(0 0 4px rgba(252,211,77,0.55)); }
+  .piece.corte { color: var(--grey); filter: drop-shadow(0 1px 1px rgba(0,0,0,0.7)); }
+
+  .dot {
+    position: absolute; width: 12px; height: 12px; border-radius: 50%;
+    background: rgba(252,211,77,0.55);
+  }
+  .ring {
+    position: absolute; width: 28px; height: 28px; border-radius: 50%;
+    box-shadow: inset 0 0 0 2px var(--amber); background: transparent;
+  }
+  @media (min-width: 480px) {
+    .ring { width: 34px; height: 34px; }
+  }
+
+  .overlay {
+    position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .overlay.flash { animation: flash-red 0.6s ease-out; }
+  .blade { font-size: 3.5rem; margin-bottom: 6px; animation: blade-drop 0.6s cubic-bezier(.2,1.4,.6,1) forwards; }
+  .overlay-card {
+    background: rgba(12,10,9,0.96); border: 1px solid #b91c1c; border-radius: 8px;
+    padding: 16px 24px;
+  }
+  .overlay-title { font-size: 1.4rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; color: var(--red); margin: 0; }
+  .overlay-sub { color: var(--text); margin: 6px 0 0; }
+
+  .overlay.promo { background: rgba(12,10,9,0.85); }
+  .promo-card { background: var(--panel); border: 1px solid var(--amber-dim); border-radius: 8px; padding: 16px; }
+  .promo-card p { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px; color: var(--text); }
+  .promo-options { display: flex; gap: 8px; justify-content: center; }
+  .promo-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 12px; background: #44403c; border: 1px solid #57534e; border-radius: 6px;
+    color: var(--text); cursor: pointer; font-family: inherit;
+  }
+  .promo-btn:hover { background: #57534e; }
+  .promo-btn .glyph { font-size: 1.6rem; }
+  .promo-btn .label { font-size: 0.7rem; color: var(--muted); }
+  .promo-foot { font-size: 0.7rem; color: var(--muted); font-style: italic; margin-top: 10px !important; }
+
+  button.action {
+    margin-top: 18px; padding: 6px 18px; border-radius: 4px; font-size: 0.85rem;
+    text-transform: uppercase; letter-spacing: 0.1em; background: transparent;
+    border: 1px solid #57534e; color: var(--muted); cursor: pointer; font-family: inherit;
+  }
+  button.action:hover { border-color: var(--amber); color: var(--amber); }
+  button.action.primary {
+    background: var(--amber); color: #1c1917; border: none; font-weight: bold; margin-top: 10px;
+  }
+  button.action.primary:hover { background: #fde68a; }
+  button.action.full { width: 100%; margin-top: 0; }
+
+  .captured {
+    display: flex; justify-content: space-between; width: 100%; max-width: 320px; margin-top: 16px; font-size: 0.85rem;
+  }
+  .captured .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px; }
+  .captured .glyphs { font-size: 1.2rem; }
+  .captured .glyphs.pueblo { color: #fcd34dbb; }
+  .captured .glyphs.corte { color: var(--muted); }
+  .captured .right { text-align: right; }
+
+  footer {
+    margin-top: 20px; font-size: 0.72rem; color: var(--muted); max-width: 420px;
+    text-align: center; line-height: 1.5;
+  }
+
+  .hidden { display: none !important; }
+
+  @keyframes blade-drop {
+    0% { transform: translateY(-160%); }
+    60% { transform: translateY(10%); }
+    75% { transform: translateY(2%); }
+    100% { transform: translateY(0%); }
+  }
+  @keyframes flash-red {
+    0%, 100% { background-color: rgba(120,10,10,0); }
+    30% { background-color: rgba(120,10,10,0.5); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">Decreto de juego</p>
+  <h1>Bastille &amp; Guillotine</h1>
+  <p class="subtitle">El Pueblo (peones) contra la Corte (piezas mayores)</p>
+</header>
+
+<!-- ---------- LOBBY ---------- -->
+<div id="lobby" class="lobby">
+  <h2>Crear partida nueva</h2>
+  <p>Recibirás un código para compartir con tu oponente. Tú serás <strong>El Pueblo</strong>.</p>
+  <button class="action primary full" onclick="createRoom()">Crear partida</button>
+
+  <div class="divider">— o —</div>
+
+  <h2>Unirse con código</h2>
+  <p>Introduce el código que te compartieron. Serás <strong>La Corte</strong>.</p>
+  <input id="joinCodeInput" maxlength="4" placeholder="XXXX" />
+  <button class="action primary full" onclick="joinRoom()">Unirse</button>
+  <p id="lobbyError" class="error hidden"></p>
+</div>
+
+<!-- ---------- GAME ---------- -->
+<div id="gameArea" class="hidden">
+  <div class="room-info">
+    <span>Sala: <span class="code" id="roomCodeLabel"></span></span>
+    <span>Tú eres: <span class="role" id="myRoleLabel"></span></span>
+  </div>
+
+  <div id="waitingMsg" class="waiting hidden">Esperando a que se una el otro jugador<span class="dots"></span></div>
+
+  <div id="turnBanner" class="turn-banner pueblo">Turno del Pueblo</div>
+  <div id="promoNotice" class="promo-notice" style="display:none;"></div>
+
+  <div class="board-wrap">
+    <div id="winOverlay" class="overlay flash" style="display:none;">
+      <div class="blade">🔻</div>
+      <div class="overlay-card">
+        <p id="winTitle" class="overlay-title"></p>
+        <p id="winSub" class="overlay-sub"></p>
+        <button class="action primary" onclick="resetGame()">Nueva partida</button>
+      </div>
+    </div>
+
+    <div id="promoOverlay" class="overlay promo" style="display:none;">
+      <div class="promo-card">
+        <p>El Sans-culotte llega al otro lado. Elige en qué se convierte:</p>
+        <div class="promo-options" id="promoOptions"></div>
+        <p class="promo-foot">Su lealtad final (Pueblo o Corte) se decidirá al azar.</p>
+      </div>
+    </div>
+
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="captured">
+    <div>
+      <p class="label">Pueblo caído</p>
+      <div class="glyphs pueblo" id="capturedPueblo"></div>
+    </div>
+    <div class="right">
+      <p class="label">Corte caída</p>
+      <div class="glyphs corte" id="capturedCorte"></div>
+    </div>
+  </div>
+
+  <button class="action" onclick="resetGame()">Reiniciar partida</button>
+</div>
+
+<footer>
+  Reglas v2: el Pueblo (peones) y la Corte (piezas mayores) son los dos bandos.
+  Cada bando está formado por fichas blancas y negras alternadas (solo decorativo).
+  Se alternan los turnos entre ambos. El Pueblo gana si captura a ambos monarcas;
+  la Corte gana si no queda ningún peón en el tablero. Al llegar a la fila final,
+  un peón elige en qué pieza se convierte, pero su lealtad (Pueblo o Corte) se
+  decide al azar.
+</footer>
+
+<!-- ---------- FIREBASE ---------- -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  // === 1) PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE ===
+  // Firebase Console -> Configuración del proyecto -> Tus apps -> SDK setup and configuration
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_PROYECTO.firebaseapp.com",
+    projectId: "TU_PROYECTO",
+    storageBucket: "TU_PROYECTO.appspot.com",
+    messagingSenderId: "TU_SENDER_ID",
+    appId: "TU_APP_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const ROOMS = db.collection('bastilleGuillotineRooms');
+</script>
+
+<!-- ---------- GAME LOGIC ---------- -->
+<script>
+const GLYPH = {
+  w: { K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙' },
+  b: { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟' },
+};
+const NAME = {
+  K: 'El Monarca', Q: 'La Dama', R: 'El Bastión',
+  B: 'El Clérigo', N: 'El Jinete', P: 'El Sans-culotte',
+};
+const PROMO_OPTIONS = [
+  { type: 'Q', label: 'Dama' },
+  { type: 'R', label: 'Bastión' },
+  { type: 'B', label: 'Clérigo' },
+  { type: 'N', label: 'Jinete' },
+];
+
+let board, turn, selected, legalMoves, captured, winner, lastMove, pendingPromotion;
+let roomCode = null;
+let myRole = null;
+let unsubscribe = null;
+
+// ---------- Tablero ----------
+function initialBoard() {
+  const b = Array.from({ length: 8 }, () => Array(8).fill(null));
+  const backRank = ['R','N','B','Q','K','B','N','R'];
+  for (let c = 0; c < 8; c++) {
+    b[0][c] = { type: backRank[c], owner: 'corte', color: c % 2 === 0 ? 'b' : 'w', moved: false };
+    b[1][c] = { type: backRank[c], owner: 'corte', color: c % 2 === 0 ? 'w' : 'b', moved: false };
+  }
+  for (let c = 0; c < 8; c++) {
+    b[6][c] = { type: 'P', owner: 'pueblo', color: c % 2 === 0 ? 'b' : 'w', moved: false };
+    b[7][c] = { type: 'P', owner: 'pueblo', color: c % 2 === 0 ? 'w' : 'b', moved: false };
+  }
+  return b;
+}
+
+function flattenBoard(b) {
+  const flat = [];
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) flat.push(b[r][c]);
+  return flat;
+}
+function unflattenBoard(flat) {
+  const b = Array.from({ length: 8 }, () => Array(8).fill(null));
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) b[r][c] = flat[r * 8 + c] || null;
+  return b;
+}
+
+const onBoardFn = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+
+function slidingMoves(b, r, c, dirs, owner) {
+  const moves = [];
+  for (const [dr, dc] of dirs) {
+    let nr = r + dr, nc = c + dc;
+    while (onBoardFn(nr, nc)) {
+      const target = b[nr][nc];
+      if (!target) {
+        moves.push([nr, nc]);
+      } else {
+        if (target.owner !== owner) moves.push([nr, nc]);
+        break;
+      }
+      nr += dr; nc += dc;
+    }
+  }
+  return moves;
+}
+
+function getMoves(b, r, c) {
+  const piece = b[r][c];
+  if (!piece) return [];
+  const { type, owner } = piece;
+  const moves = [];
+
+  if (type === 'N') {
+    const offs = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    for (const [dr, dc] of offs) {
+      const nr = r + dr, nc = c + dc;
+      if (onBoardFn(nr, nc)) {
+        const t = b[nr][nc];
+        if (!t || t.owner !== owner) moves.push([nr, nc]);
+      }
+    }
+  } else if (type === 'B') {
+    moves.push(...slidingMoves(b, r, c, [[-1,-1],[-1,1],[1,-1],[1,1]], owner));
+  } else if (type === 'R') {
+    moves.push(...slidingMoves(b, r, c, [[-1,0],[1,0],[0,-1],[0,1]], owner));
+  } else if (type === 'Q') {
+    moves.push(...slidingMoves(b, r, c, [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]], owner));
+  } else if (type === 'K') {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr, nc = c + dc;
+      if (onBoardFn(nr, nc)) {
+        const t = b[nr][nc];
+        if (!t || t.owner !== owner) moves.push([nr, nc]);
+      }
+    }
+  } else if (type === 'P') {
+    const dir = -1;
+    const nr = r + dir;
+    if (onBoardFn(nr, c) && !b[nr][c]) {
+      moves.push([nr, c]);
+      if (!piece.moved) {
+        const nr2 = r + 2 * dir;
+        if (onBoardFn(nr2, c) && !b[nr2][c]) moves.push([nr2, c]);
+      }
+    }
+    for (const dc of [-1, 1]) {
+      const nc = c + dc;
+      if (onBoardFn(nr, nc)) {
+        const t = b[nr][nc];
+        if (t && t.owner !== owner) moves.push([nr, nc]);
+      }
+    }
+  }
+  return moves;
+}
+
+function countByType(b, type) {
+  let n = 0;
+  for (const row of b) for (const cell of row) if (cell && cell.type === type) n++;
+  return n;
+}
+
+// ---------- Sala / Firebase ----------
+function genCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+async function createRoom() {
+  const code = genCode();
+  const initial = {
+    board: flattenBoard(initialBoard()),
+    turn: 'pueblo',
+    captured: { pueblo: [], corte: [] },
+    winner: null,
+    lastMove: null,
+    players: { pueblo: true, corte: false },
+    updatedAt: Date.now(),
+  };
+  await ROOMS.doc(code).set(initial);
+  myRole = 'pueblo';
+  enterRoom(code);
+}
+
+async function joinRoom() {
+  const input = document.getElementById('joinCodeInput');
+  const code = input.value.trim().toUpperCase();
+  const errEl = document.getElementById('lobbyError');
+  errEl.classList.add('hidden');
+  if (code.length !== 4) {
+    errEl.textContent = 'El código tiene 4 caracteres.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  const ref = ROOMS.doc(code);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    errEl.textContent = 'No se encontró esa sala.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  const data = snap.data();
+  if (data.players && data.players.corte) {
+    errEl.textContent = 'Esa sala ya tiene dos jugadores.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  await ref.update({ 'players.corte': true });
+  myRole = 'corte';
+  enterRoom(code);
+}
+
+function enterRoom(code) {
+  roomCode = code;
+  document.getElementById('lobby').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  document.getElementById('roomCodeLabel').textContent = code;
+  const roleLabel = document.getElementById('myRoleLabel');
+  roleLabel.textContent = myRole === 'pueblo' ? 'El Pueblo' : 'La Corte';
+  roleLabel.className = 'role ' + myRole;
+
+  if (unsubscribe) unsubscribe();
+  unsubscribe = ROOMS.doc(code).onSnapshot(snap => {
+    if (!snap.exists) return;
+    const data = snap.data();
+    board = unflattenBoard(data.board);
+    turn = data.turn;
+    captured = data.captured || { pueblo: [], corte: [] };
+    winner = data.winner || null;
+    lastMove = data.lastMove || null;
+    selected = null;
+    legalMoves = [];
+    pendingPromotion = null;
+
+    const waiting = document.getElementById('waitingMsg');
+    const bothJoined = data.players && data.players.pueblo && data.players.corte;
+    waiting.classList.toggle('hidden', !!bothJoined);
+
+    render();
+  });
+}
+
+async function pushState() {
+  if (!roomCode) return;
+  await ROOMS.doc(roomCode).update({
+    board: flattenBoard(board),
+    turn,
+    captured,
+    winner,
+    lastMove,
+    updatedAt: Date.now(),
+  });
+}
+
+async function resetGame() {
+  if (!roomCode) return;
+  await ROOMS.doc(roomCode).update({
+    board: flattenBoard(initialBoard()),
+    turn: 'pueblo',
+    captured: { pueblo: [], corte: [] },
+    winner: null,
+    lastMove: null,
+    updatedAt: Date.now(),
+  });
+}
+
+// ---------- Lógica de turno ----------
+function finalizeTurnChecks(mover) {
+  if (countByType(board, 'K') === 0) {
+    winner = 'pueblo';
+  } else if (countByType(board, 'P') === 0) {
+    winner = 'corte';
+  } else {
+    turn = mover === 'pueblo' ? 'corte' : 'pueblo';
+  }
+}
+
+function handleClick(r, c) {
+  if (winner || pendingPromotion) return;
+  if (turn !== myRole) return; // no es tu turno
+  const piece = board[r][c];
+
+  if (selected) {
+    const [sr, sc] = selected;
+    const isLegal = legalMoves.some(([mr, mc]) => mr === r && mc === c);
+    if (isLegal) {
+      const moving = { ...board[sr][sc], moved: true };
+      const target = board[r][c];
+
+      if (target) {
+        captured[target.owner].push(target.type);
+      }
+
+      board[r][c] = moving;
+      board[sr][sc] = null;
+      lastMove = { from: [sr, sc], to: [r, c] };
+      selected = null;
+      legalMoves = [];
+
+      if (moving.type === 'P' && r === 0) {
+        pendingPromotion = { row: r, col: c };
+        render();
+        return; // se sincroniza al resolver la promoción
+      }
+
+      finalizeTurnChecks(turn);
+      render();
+      pushState();
+      return;
+    }
+    if (piece && piece.owner === turn) {
+      selected = [r, c];
+      legalMoves = getMoves(board, r, c);
+      render();
+      return;
+    }
+    selected = null;
+    legalMoves = [];
+    render();
+    return;
+  }
+
+  if (piece && piece.owner === turn) {
+    selected = [r, c];
+    legalMoves = getMoves(board, r, c);
+    render();
+  }
+}
+
+function resolvePromotion(type) {
+  const { row, col } = pendingPromotion;
+  const newOwner = Math.random() < 0.5 ? 'pueblo' : 'corte';
+  const newColor = Math.random() < 0.5 ? 'w' : 'b';
+  board[row][col] = { type, owner: newOwner, color: newColor, moved: true };
+  pendingPromotion = null;
+
+  const notice = document.getElementById('promoNotice');
+  notice.textContent = `¡${NAME[type]} nace de entre el pueblo... y jura lealtad a ${newOwner === 'pueblo' ? 'EL PUEBLO' : 'LA CORTE'}!`;
+  notice.style.display = 'block';
+  setTimeout(() => { notice.style.display = 'none'; }, 2600);
+
+  finalizeTurnChecks(turn);
+  render();
+  pushState();
+}
+
+// ---------- Render ----------
+function render() {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      const isLight = (r + c) % 2 === 0;
+      const isSelected = selected && selected[0] === r && selected[1] === c;
+      const isLegal = legalMoves.some(([mr, mc]) => mr === r && mc === c);
+      const isLastFrom = lastMove && lastMove.from[0] === r && lastMove.from[1] === c;
+      const isLastTo = lastMove && lastMove.to[0] === r && lastMove.to[1] === c;
+
+      const sq = document.createElement('div');
+      sq.className = 'sq ' + (isLight ? 'light' : 'dark');
+      if (isSelected) sq.classList.add('selected');
+      if ((isLastFrom || isLastTo) && !isSelected) sq.classList.add('last');
+      sq.onclick = () => handleClick(r, c);
+
+      if (piece) {
+        const span = document.createElement('span');
+        span.className = 'piece ' + (piece.owner === 'pueblo' ? 'pueblo' : 'corte');
+        span.textContent = GLYPH[piece.color][piece.type];
+        sq.title = `${NAME[piece.type]} — ${piece.owner === 'pueblo' ? 'Pueblo' : 'Corte'}`;
+        sq.appendChild(span);
+      }
+
+      if (isLegal) {
+        const marker = document.createElement('span');
+        marker.className = piece ? 'ring' : 'dot';
+        sq.appendChild(marker);
+      }
+
+      boardEl.appendChild(sq);
+    }
+  }
+
+  const banner = document.getElementById('turnBanner');
+  const winOverlay = document.getElementById('winOverlay');
+  const promoOverlay = document.getElementById('promoOverlay');
+
+  if (winner) {
+    banner.style.display = 'none';
+    winOverlay.style.display = 'flex';
+    promoOverlay.style.display = 'none';
+    document.getElementById('winTitle').textContent =
+      winner === 'pueblo' ? '¡Caen ambas coronas!' : '¡El pueblo ha sido aniquilado!';
+    document.getElementById('winSub').textContent =
+      'Vence ' + (winner === 'pueblo' ? 'el Pueblo' : 'la Corte');
+  } else {
+    winOverlay.style.display = 'none';
+    banner.style.display = 'inline-block';
+    banner.className = 'turn-banner ' + turn + (turn === myRole ? ' mine' : '');
+    banner.textContent = 'Turno ' + (turn === 'pueblo' ? 'del Pueblo' : 'de la Corte') +
+      (turn === myRole ? ' (tú)' : ' (esperando al rival)');
+
+    if (pendingPromotion) {
+      promoOverlay.style.display = 'flex';
+      const opts = document.getElementById('promoOptions');
+      opts.innerHTML = '';
+      for (const opt of PROMO_OPTIONS) {
+        const btn = document.createElement('button');
+        btn.className = 'promo-btn';
+        btn.onclick = () => resolvePromotion(opt.type);
+        const glyph = document.createElement('span');
+        glyph.className = 'glyph';
+        glyph.textContent = GLYPH.b[opt.type];
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = opt.label;
+        btn.appendChild(glyph);
+        btn.appendChild(label);
+        opts.appendChild(btn);
+      }
+    } else {
+      promoOverlay.style.display = 'none';
+    }
+  }
+
+  const cp = document.getElementById('capturedPueblo');
+  const cc = document.getElementById('capturedCorte');
+  cp.innerHTML = captured.pueblo.map(t => GLYPH.b[t]).join(' ');
+  cc.innerHTML = captured.corte.map(t => GLYPH.b[t]).join(' ');
+}
+</script>
+</body>
+</html>
