@@ -53,6 +53,12 @@
     text-align: center; text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 8px;
   }
   .lobby .error { color: var(--red); font-size: 0.8rem; margin-top: 8px; }
+  .lobby select {
+    width: 100%; padding: 8px 10px; background: #292524; border: 1px solid #44403c;
+    border-radius: 4px; color: var(--text); font-family: inherit; font-size: 0.9rem;
+    margin-bottom: 10px;
+  }
+  .lobby label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 6px; text-align: left; }
 
   /* ---------- Game header ---------- */
   .room-info {
@@ -66,6 +72,7 @@
   .room-info .role { text-transform: uppercase; letter-spacing: 0.1em; }
   .room-info .role.pueblo { color: var(--amber); }
   .room-info .role.corte { color: var(--grey); }
+  #modeInfo { font-style: italic; }
 
   .waiting {
     margin-top: 10px; font-size: 0.85rem; color: var(--muted); text-align: center;
@@ -188,6 +195,17 @@
 
   .hidden { display: none !important; }
 
+  #eventBanner {
+    position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 40; background: rgba(12,10,9,0.94); border: 1px solid var(--amber-dim);
+    color: var(--amber); padding: 10px 22px; border-radius: 6px;
+    font-size: 1.15rem; text-transform: uppercase; letter-spacing: 0.1em;
+    text-align: center; opacity: 0; pointer-events: none;
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    max-width: 88vw; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  }
+  #eventBanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+
   @keyframes blade-drop {
     0% { transform: translateY(-160%); }
     60% { transform: translateY(10%); }
@@ -201,6 +219,8 @@
 </style>
 </head>
 <body>
+
+<div id="eventBanner"></div>
 
 <header>
   <p class="eyebrow">Decreto de juego</p>
@@ -221,14 +241,31 @@
   <input id="joinCodeInput" maxlength="4" placeholder="XXXX" />
   <button class="action primary full" onclick="joinRoom()">Unirse</button>
   <p id="lobbyError" class="error hidden"></p>
+
+  <div class="divider">— o —</div>
+
+  <h2>Practicar sin conexión</h2>
+  <p>Juega los dos bandos en este mismo dispositivo, o practica contra una IA básica.</p>
+  <button class="action primary full" onclick="startLocal()">Modo local (2 jugadores)</button>
+
+  <label for="difficultySelect" style="margin-top:14px;">Dificultad de la IA (entrenamiento)</label>
+  <select id="difficultySelect">
+    <option value="1">1 - Aleatoria</option>
+    <option value="2">2 - Prefiere capturas</option>
+    <option value="3">3 - Evalúa material</option>
+    <option value="4">4 - Anticipa tu respuesta</option>
+    <option value="5">5 - Planifica varias jugadas</option>
+  </select>
+  <button class="action primary full" onclick="startTraining()">Entrenamiento (vs IA)</button>
 </div>
 
 <!-- ---------- GAME ---------- -->
 <div id="gameArea" class="hidden">
-  <div class="room-info">
+  <div class="room-info" id="roomInfo">
     <span>Sala: <span class="code" id="roomCodeLabel"></span></span>
     <span>Tú eres: <span class="role" id="myRoleLabel"></span></span>
   </div>
+  <div class="room-info" id="modeInfo" style="display:none;"></div>
 
   <div id="waitingMsg" class="waiting hidden">Esperando a que se una el otro jugador<span class="dots"></span></div>
 
@@ -268,15 +305,15 @@
   </div>
 
   <button class="action" onclick="resetGame()">Reiniciar partida</button>
+  <button class="action" onclick="exitToLobby()">Salir al menú</button>
 </div>
 
 <footer>
-  Reglas v2: el Pueblo (peones) y la Corte (piezas mayores) son los dos bandos.
-  Cada bando está formado por fichas blancas y negras alternadas (solo decorativo).
-  Se alternan los turnos entre ambos. El Pueblo gana si captura a ambos monarcas;
-  la Corte gana si no queda ningún peón en el tablero. Al llegar a la fila final,
-  un peón elige en qué pieza se convierte, pero su lealtad (Pueblo o Corte) se
-  decide al azar.
+  Reglas v3: la Corte (Torres, Alfiles, Dama y el único Rey) ocupa las filas 7-8;
+  el Pueblo (Peones, Caballos y una Dama) ocupa las filas 1-3. Se alternan los
+  turnos entre ambos bandos. El Pueblo gana si captura al Rey; la Corte gana si
+  no queda ningún Peón del Pueblo. Al llegar a la fila final, un peón elige en
+  qué pieza se convierte, pero su lealtad (Pueblo o Corte) se decide al azar.
 </footer>
 
 <!-- ---------- FIREBASE ---------- -->
@@ -286,12 +323,13 @@
   // === 1) PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE ===
   // Firebase Console -> Configuración del proyecto -> Tus apps -> SDK setup and configuration
   const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_PROYECTO.firebaseapp.com",
-    projectId: "TU_PROYECTO",
-    storageBucket: "TU_PROYECTO.appspot.com",
-    messagingSenderId: "TU_SENDER_ID",
-    appId: "TU_APP_ID"
+    apiKey: "AIzaSyAEdytVSqZ61atXMViZ_32nS-0Wsj9wYS8",
+    authDomain: "bastillenguillotine.firebaseapp.com",
+    projectId: "bastillenguillotine",
+    storageBucket: "bastillenguillotine.firebasestorage.app",
+    messagingSenderId: "475367241779",
+    appId: "1:475367241779:web:c7615255377d540bf54b46",
+    measurementId: "G-L69R57BW5H"
   };
 
   firebase.initializeApp(firebaseConfig);
@@ -320,18 +358,62 @@ let board, turn, selected, legalMoves, captured, winner, lastMove, pendingPromot
 let roomCode = null;
 let myRole = null;
 let unsubscribe = null;
+let mode = 'online'; // 'online' | 'local' | 'training'
+let aiLevel = 1;
+
+// ---------- Mensajes en sobreimpresión ----------
+let lastTurn = null;
+let lastCapturedPueblo = 0;
+let lastCapturedCorte = 0;
+let lastWinner = null;
+let firstTurnChangeShown = false;
+let messageQueue = [];
+let messageBusy = false;
+
+function queueMessage(text) {
+  messageQueue.push(text);
+  if (!messageBusy) processMessageQueue();
+}
+
+function processMessageQueue() {
+  if (messageQueue.length === 0) { messageBusy = false; return; }
+  messageBusy = true;
+  const el = document.getElementById('eventBanner');
+  el.textContent = messageQueue.shift();
+  el.classList.add('show');
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(processMessageQueue, 250);
+  }, 1400);
+}
+
+function resetMessageTracking() {
+  lastTurn = 'pueblo';
+  lastCapturedPueblo = 0;
+  lastCapturedCorte = 0;
+  lastWinner = null;
+  firstTurnChangeShown = false;
+}
 
 // ---------- Tablero ----------
 function initialBoard() {
   const b = Array.from({ length: 8 }, () => Array(8).fill(null));
-  const backRank = ['R','N','B','Q','K','B','N','R'];
+
+  // Corte (filas 8 y 7): Torres, Alfiles, Dama y el único Rey
+  const row0 = ['R', null, 'B', 'Q', 'K', 'B', null, 'R']; // Fila 8
+  const row1 = ['R', null, 'B', null, null, 'B', null, 'R']; // Fila 7
+
+  // Pueblo (filas 3, 2 y 1): Caballos, una Dama y Peones
+  const row5 = ['N', null, 'N', 'P', 'N', null, 'N', null]; // Fila 3
+  const row6 = ['P', 'P', 'P', 'Q', 'P', 'P', 'P', 'P'];     // Fila 2
+  const row7 = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'];     // Fila 1
+
   for (let c = 0; c < 8; c++) {
-    b[0][c] = { type: backRank[c], owner: 'corte', color: c % 2 === 0 ? 'b' : 'w', moved: false };
-    b[1][c] = { type: backRank[c], owner: 'corte', color: c % 2 === 0 ? 'w' : 'b', moved: false };
-  }
-  for (let c = 0; c < 8; c++) {
-    b[6][c] = { type: 'P', owner: 'pueblo', color: c % 2 === 0 ? 'b' : 'w', moved: false };
-    b[7][c] = { type: 'P', owner: 'pueblo', color: c % 2 === 0 ? 'w' : 'b', moved: false };
+    if (row0[c]) b[0][c] = { type: row0[c], owner: 'corte', color: c % 2 === 0 ? 'b' : 'w', moved: false };
+    if (row1[c]) b[1][c] = { type: row1[c], owner: 'corte', color: c % 2 === 0 ? 'w' : 'b', moved: false };
+    if (row5[c]) b[5][c] = { type: row5[c], owner: 'pueblo', color: c % 2 === 0 ? 'b' : 'w', moved: false };
+    if (row6[c]) b[6][c] = { type: row6[c], owner: 'pueblo', color: c % 2 === 0 ? 'w' : 'b', moved: false };
+    if (row7[c]) b[7][c] = { type: row7[c], owner: 'pueblo', color: c % 2 === 0 ? 'b' : 'w', moved: false };
   }
   return b;
 }
@@ -477,9 +559,13 @@ async function joinRoom() {
 }
 
 function enterRoom(code) {
+  mode = 'online';
   roomCode = code;
+  resetMessageTracking();
   document.getElementById('lobby').classList.add('hidden');
   document.getElementById('gameArea').classList.remove('hidden');
+  document.getElementById('roomInfo').style.display = 'flex';
+  document.getElementById('modeInfo').style.display = 'none';
   document.getElementById('roomCodeLabel').textContent = code;
   const roleLabel = document.getElementById('myRoleLabel');
   roleLabel.textContent = myRole === 'pueblo' ? 'El Pueblo' : 'La Corte';
@@ -506,6 +592,192 @@ function enterRoom(code) {
   });
 }
 
+function startLocal() {
+  mode = 'local';
+  myRole = null; // los dos bandos se controlan en el mismo dispositivo
+  roomCode = null;
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+
+  board = initialBoard();
+  turn = 'pueblo';
+  selected = null;
+  legalMoves = [];
+  captured = { pueblo: [], corte: [] };
+  winner = null;
+  lastMove = null;
+  pendingPromotion = null;
+
+  document.getElementById('lobby').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  document.getElementById('roomInfo').style.display = 'none';
+  document.getElementById('waitingMsg').classList.add('hidden');
+  const modeInfo = document.getElementById('modeInfo');
+  modeInfo.style.display = 'flex';
+  modeInfo.innerHTML = '<span>Modo local — pasa el dispositivo entre turnos</span>';
+
+  resetMessageTracking();
+  render();
+}
+
+function startTraining() {
+  mode = 'training';
+  myRole = 'pueblo'; // el jugador siempre controla al Pueblo
+  roomCode = null;
+  aiLevel = parseInt(document.getElementById('difficultySelect').value, 10) || 1;
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+
+  board = initialBoard();
+  turn = 'pueblo';
+  selected = null;
+  legalMoves = [];
+  captured = { pueblo: [], corte: [] };
+  winner = null;
+  lastMove = null;
+  pendingPromotion = null;
+
+  document.getElementById('lobby').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  document.getElementById('roomInfo').style.display = 'none';
+  document.getElementById('waitingMsg').classList.add('hidden');
+  const modeInfo = document.getElementById('modeInfo');
+  modeInfo.style.display = 'flex';
+  modeInfo.innerHTML = `<span>Entrenamiento (Nivel ${aiLevel}) — controlas al Pueblo, la IA juega la Corte</span>`;
+
+  resetMessageTracking();
+  render();
+}
+
+function exitToLobby() {
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  roomCode = null;
+  myRole = null;
+  mode = 'online';
+  document.getElementById('gameArea').classList.add('hidden');
+  document.getElementById('lobby').classList.remove('hidden');
+  document.getElementById('lobbyError').classList.add('hidden');
+  document.getElementById('joinCodeInput').value = '';
+}
+
+// ---------- IA de entrenamiento ----------
+const PIECE_VALUE = { K: 1000, Q: 9, R: 5, B: 3, N: 3, P: 1 };
+
+function cloneBoard(b) {
+  return b.map(row => row.map(cell => (cell ? { ...cell } : null)));
+}
+
+function evaluatePosition(b) {
+  let score = 0;
+  for (const row of b) for (const cell of row) {
+    if (!cell) continue;
+    score += (cell.owner === 'corte' ? 1 : -1) * PIECE_VALUE[cell.type];
+  }
+  return score;
+}
+
+function allMovesFor(b, owner) {
+  const moves = [];
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const piece = b[r][c];
+    if (piece && piece.owner === owner) {
+      for (const [mr, mc] of getMoves(b, r, c)) moves.push({ from: [r, c], to: [mr, mc] });
+    }
+  }
+  return moves;
+}
+
+// Aplica un movimiento sobre una copia del tablero (para simulación de la IA).
+// Las promociones se simplifican siempre a Dama, conservando el dueño original.
+function simulateMove(b, move) {
+  const nb = cloneBoard(b);
+  const [sr, sc] = move.from, [r, c] = move.to;
+  const moving = { ...nb[sr][sc], moved: true };
+  nb[r][c] = moving;
+  nb[sr][sc] = null;
+  if (moving.type === 'P' && r === 0) moving.type = 'Q';
+  return nb;
+}
+
+// Minimax simple: corte maximiza, pueblo minimiza la puntuación de material.
+function minimax(b, depth, corteToMove) {
+  const kings = countByType(b, 'K');
+  const pawns = countByType(b, 'P');
+  if (kings === 0) return -10000; // gana el Pueblo
+  if (pawns === 0) return 10000;  // gana la Corte
+  if (depth === 0) return evaluatePosition(b);
+
+  const moves = allMovesFor(b, corteToMove ? 'corte' : 'pueblo');
+  if (moves.length === 0) return evaluatePosition(b);
+
+  let best = corteToMove ? -Infinity : Infinity;
+  for (const move of moves) {
+    const nb = simulateMove(b, move);
+    const val = minimax(nb, depth - 1, !corteToMove);
+    best = corteToMove ? Math.max(best, val) : Math.min(best, val);
+  }
+  return best;
+}
+
+function pickBestMoves(candidates, scoreFn) {
+  let best = -Infinity;
+  let bestMoves = [];
+  for (const move of candidates) {
+    const s = scoreFn(move);
+    if (s > best + 1e-9) { best = s; bestMoves = [move]; }
+    else if (Math.abs(s - best) < 1e-9) { bestMoves.push(move); }
+  }
+  return bestMoves;
+}
+
+function chooseAiMove(candidates) {
+  if (candidates.length === 0) return null;
+
+  if (aiLevel === 1) {
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  if (aiLevel === 2) {
+    const captures = candidates.filter(m => board[m.to[0]][m.to[1]]);
+    const pool = captures.length > 0 ? captures : candidates;
+    // entre las capturas, prioriza la pieza de mayor valor capturada
+    if (captures.length > 0) {
+      const best = pickBestMoves(pool, m => PIECE_VALUE[board[m.to[0]][m.to[1]].type]);
+      return best[Math.floor(Math.random() * best.length)];
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Niveles 3-5: minimax con profundidad creciente
+  const depthAfterMove = aiLevel === 3 ? 0 : aiLevel === 4 ? 1 : 2;
+  const best = pickBestMoves(candidates, move => {
+    const nb = simulateMove(board, move);
+    return minimax(nb, depthAfterMove, false); // tras mover la Corte, le toca al Pueblo
+  });
+  return best[Math.floor(Math.random() * best.length)];
+}
+
+function aiMove() {
+  if (winner || mode !== 'training' || turn !== 'corte') return;
+
+  const candidates = allMovesFor(board, 'corte');
+  const choice = chooseAiMove(candidates);
+  if (!choice) return; // sin movimientos posibles
+
+  const [sr, sc] = choice.from;
+  const [r, c] = choice.to;
+
+  const moving = { ...board[sr][sc], moved: true };
+  const target = board[r][c];
+  if (target) captured[target.owner].push(target.type);
+
+  board[r][c] = moving;
+  board[sr][sc] = null;
+  lastMove = { from: [sr, sc], to: [r, c] };
+
+  // Las piezas de la Corte nunca son peones, así que no hay promoción aquí.
+  finalizeTurnChecks('corte');
+  render();
+}
+
 async function pushState() {
   if (!roomCode) return;
   await ROOMS.doc(roomCode).update({
@@ -519,15 +791,29 @@ async function pushState() {
 }
 
 async function resetGame() {
-  if (!roomCode) return;
-  await ROOMS.doc(roomCode).update({
-    board: flattenBoard(initialBoard()),
-    turn: 'pueblo',
-    captured: { pueblo: [], corte: [] },
-    winner: null,
-    lastMove: null,
-    updatedAt: Date.now(),
-  });
+  const fresh = initialBoard();
+  if (mode === 'online') {
+    if (!roomCode) return;
+    await ROOMS.doc(roomCode).update({
+      board: flattenBoard(fresh),
+      turn: 'pueblo',
+      captured: { pueblo: [], corte: [] },
+      winner: null,
+      lastMove: null,
+      updatedAt: Date.now(),
+    });
+  } else {
+    board = fresh;
+    turn = 'pueblo';
+    selected = null;
+    legalMoves = [];
+    captured = { pueblo: [], corte: [] };
+    winner = null;
+    lastMove = null;
+    pendingPromotion = null;
+    resetMessageTracking();
+    render();
+  }
 }
 
 // ---------- Lógica de turno ----------
@@ -543,7 +829,8 @@ function finalizeTurnChecks(mover) {
 
 function handleClick(r, c) {
   if (winner || pendingPromotion) return;
-  if (turn !== myRole) return; // no es tu turno
+  if (mode === 'online' && turn !== myRole) return; // no es tu turno
+  if (mode === 'training' && turn !== 'pueblo') return; // turno de la IA
   const piece = board[r][c];
 
   if (selected) {
@@ -571,7 +858,7 @@ function handleClick(r, c) {
 
       finalizeTurnChecks(turn);
       render();
-      pushState();
+      postMoveSync();
       return;
     }
     if (piece && piece.owner === turn) {
@@ -601,17 +888,39 @@ function resolvePromotion(type) {
   pendingPromotion = null;
 
   const notice = document.getElementById('promoNotice');
-  notice.textContent = `¡${NAME[type]} nace de entre el pueblo... y jura lealtad a ${newOwner === 'pueblo' ? 'EL PUEBLO' : 'LA CORTE'}!`;
+  notice.textContent = newOwner === 'pueblo' ? '¡Venganza fría!' : '¡Traición al pueblo!';
   notice.style.display = 'block';
   setTimeout(() => { notice.style.display = 'none'; }, 2600);
 
   finalizeTurnChecks(turn);
   render();
-  pushState();
+  postMoveSync();
+}
+
+function postMoveSync() {
+  if (mode === 'online') {
+    pushState();
+  } else if (mode === 'training' && !winner && turn === 'corte') {
+    setTimeout(aiMove, 600);
+  }
 }
 
 // ---------- Render ----------
 function render() {
+  // --- Disparo de mensajes según cambios de estado ---
+  if (!winner) {
+    if (lastTurn !== null && lastTurn !== turn && !firstTurnChangeShown) {
+      queueMessage(turn === 'pueblo' ? '¡Abajo el Rey!' : 'Obligáis a Nos a usar la fuerza…');
+      firstTurnChangeShown = true;
+    }
+  }
+  if (captured.pueblo.length > lastCapturedPueblo) queueMessage('¡No desfallecer!');
+  if (captured.corte.length > lastCapturedCorte) queueMessage('¡GUILLOTINA!');
+  lastTurn = turn;
+  lastCapturedPueblo = captured.pueblo.length;
+  lastCapturedCorte = captured.corte.length;
+  lastWinner = winner;
+
   const boardEl = document.getElementById('board');
   boardEl.innerHTML = '';
 
@@ -657,15 +966,20 @@ function render() {
     winOverlay.style.display = 'flex';
     promoOverlay.style.display = 'none';
     document.getElementById('winTitle').textContent =
-      winner === 'pueblo' ? '¡Caen ambas coronas!' : '¡El pueblo ha sido aniquilado!';
+      winner === 'pueblo' ? '¡Somos libres!' : 'La masacre era inevitable';
     document.getElementById('winSub').textContent =
       'Vence ' + (winner === 'pueblo' ? 'el Pueblo' : 'la Corte');
   } else {
     winOverlay.style.display = 'none';
     banner.style.display = 'inline-block';
     banner.className = 'turn-banner ' + turn + (turn === myRole ? ' mine' : '');
-    banner.textContent = 'Turno ' + (turn === 'pueblo' ? 'del Pueblo' : 'de la Corte') +
-      (turn === myRole ? ' (tú)' : ' (esperando al rival)');
+    let suffix = '';
+    if (mode === 'online') {
+      suffix = turn === myRole ? ' (tú)' : ' (esperando al rival)';
+    } else if (mode === 'training') {
+      suffix = turn === 'pueblo' ? ' (tú)' : ' (la IA está pensando...)';
+    }
+    banner.textContent = 'Turno ' + (turn === 'pueblo' ? 'del Pueblo' : 'de la Corte') + suffix;
 
     if (pendingPromotion) {
       promoOverlay.style.display = 'flex';
