@@ -893,7 +893,8 @@ function handleClick(r, c) {
 
 function resolvePromotion(type) {
   const { row, col } = pendingPromotion;
-  const newOwner = Math.random() < 0.5 ? 'pueblo' : 'corte';
+  const betrayalChance = PROMO_BETRAYAL_CHANCE[type] ?? 0.5;
+  const newOwner = Math.random() < betrayalChance ? 'corte' : 'pueblo';
   const newColor = Math.random() < 0.5 ? 'w' : 'b';
   board[row][col] = { type, owner: newOwner, color: newColor, moved: true };
   pendingPromotion = null;
