@@ -311,9 +311,11 @@
 <footer>
   Reglas v3: la Corte (Torres, Alfiles, Dama y el único Rey) ocupa las filas 7-8;
   el Pueblo (Peones, Caballos y una Dama) ocupa las filas 1-3. Se alternan los
-  turnos entre ambos bandos. El Pueblo gana si captura al Rey; la Corte gana si
-  no queda ningún Peón del Pueblo. Al llegar a la fila final, un peón elige en
-  qué pieza se convierte, pero su lealtad (Pueblo o Corte) se decide al azar.
+  turnos entre ambos bandos. El Pueblo gana si captura al Rey; la Corte gana
+  solo si el Pueblo se queda sin ninguna ficha en el tablero. Al llegar a la
+  fila final, un peón elige en qué pieza se convierte, pero su lealtad (Pueblo
+  o Corte) se decide al azar — esa pieza sigue contando para el bando que la
+  reciba.
 </footer>
 
 <!-- ---------- FIREBASE ---------- -->
@@ -353,6 +355,9 @@ const PROMO_OPTIONS = [
   { type: 'B', label: 'Clérigo' },
   { type: 'N', label: 'Jinete' },
 ];
+
+// Probabilidad de que la pieza promovida traicione al Pueblo (pase a la Corte)
+const PROMO_BETRAYAL_CHANCE = { Q: 0.50, R: 0.35, B: 0.25, N: 0.10 };
 
 let board, turn, selected, legalMoves, captured, winner, lastMove, pendingPromotion;
 let roomCode = null;
@@ -503,6 +508,12 @@ function getMoves(b, r, c) {
 function countByType(b, type) {
   let n = 0;
   for (const row of b) for (const cell of row) if (cell && cell.type === type) n++;
+  return n;
+}
+
+function countByOwner(b, owner) {
+  let n = 0;
+  for (const row of b) for (const cell of row) if (cell && cell.owner === owner) n++;
   return n;
 }
 
@@ -700,9 +711,9 @@ function simulateMove(b, move) {
 // Minimax simple: corte maximiza, pueblo minimiza la puntuación de material.
 function minimax(b, depth, corteToMove) {
   const kings = countByType(b, 'K');
-  const pawns = countByType(b, 'P');
+  const puebloPieces = countByOwner(b, 'pueblo');
   if (kings === 0) return -10000; // gana el Pueblo
-  if (pawns === 0) return 10000;  // gana la Corte
+  if (puebloPieces === 0) return 10000; // gana la Corte
   if (depth === 0) return evaluatePosition(b);
 
   const moves = allMovesFor(b, corteToMove ? 'corte' : 'pueblo');
@@ -820,7 +831,7 @@ async function resetGame() {
 function finalizeTurnChecks(mover) {
   if (countByType(board, 'K') === 0) {
     winner = 'pueblo';
-  } else if (countByType(board, 'P') === 0) {
+  } else if (countByOwner(board, 'pueblo') === 0) {
     winner = 'corte';
   } else {
     turn = mover === 'pueblo' ? 'corte' : 'pueblo';
@@ -914,8 +925,13 @@ function render() {
       firstTurnChangeShown = true;
     }
   }
-  if (captured.pueblo.length > lastCapturedPueblo) queueMessage('¡No desfallecer!');
-  if (captured.corte.length > lastCapturedCorte) queueMessage('¡GUILLOTINA!');
+  const DEATH_MESSAGE_CHANCE = 0.15;
+  if (captured.pueblo.length > lastCapturedPueblo && Math.random() < DEATH_MESSAGE_CHANCE) {
+    queueMessage('¡No desfallecer!');
+  }
+  if (captured.corte.length > lastCapturedCorte && Math.random() < DEATH_MESSAGE_CHANCE) {
+    queueMessage('¡GUILLOTINA!');
+  }
   lastTurn = turn;
   lastCapturedPueblo = captured.pueblo.length;
   lastCapturedCorte = captured.corte.length;
