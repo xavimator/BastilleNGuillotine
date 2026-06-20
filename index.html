@@ -346,9 +346,17 @@
     measurementId: "G-L69R57BW5H"
   };
 
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const ROOMS = db.collection('bastilleGuillotineRooms');
+  let db = null;
+  let ROOMS = null;
+  let firebaseReady = false;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    ROOMS = db.collection('bastilleGuillotineRooms');
+    firebaseReady = true;
+  } catch (e) {
+    console.error('No se pudo inicializar Firebase:', e);
+  }
 </script>
 
 <!-- ---------- GAME LOGIC ---------- -->
@@ -598,6 +606,7 @@ function confirmSetup() {
   } else {
     applySetupAndStart();
     resetMessageTracking();
+    hideSetupScreen();
     render();
   }
 }
@@ -640,6 +649,12 @@ function genCode() {
 }
 
 async function createRoom() {
+  if (!firebaseReady) {
+    const errEl = document.getElementById('lobbyError');
+    errEl.textContent = 'No se pudo conectar con Firebase (revisa tu conexión o bloqueador de anuncios). Puedes usar el modo local o entrenamiento mientras tanto.';
+    errEl.classList.remove('hidden');
+    return;
+  }
   const code = genCode();
   const initial = {
     board: flattenBoard(initialBoard()),
@@ -658,6 +673,12 @@ async function createRoom() {
 }
 
 async function joinRoom() {
+  if (!firebaseReady) {
+    const errEl = document.getElementById('lobbyError');
+    errEl.textContent = 'No se pudo conectar con Firebase (revisa tu conexión o bloqueador de anuncios). Puedes usar el modo local o entrenamiento mientras tanto.';
+    errEl.classList.remove('hidden');
+    return;
+  }
   const input = document.getElementById('joinCodeInput');
   const code = input.value.trim().toUpperCase();
   const errEl = document.getElementById('lobbyError');
