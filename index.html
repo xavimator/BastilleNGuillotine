@@ -177,6 +177,7 @@
     background: var(--amber); color: #1c1917; border: none; font-weight: bold; margin-top: 10px;
   }
   button.action.primary:hover { background: #fde68a; }
+  button.action.primary:disabled { opacity: 0.4; cursor: not-allowed; }
   button.action.full { width: 100%; margin-top: 0; }
 
   .captured {
@@ -268,6 +269,17 @@
   <div class="room-info" id="modeInfo" style="display:none;"></div>
 
   <div id="waitingMsg" class="waiting hidden">Esperando a que se una el otro jugador<span class="dots"></span></div>
+
+  <div id="setupScreen" class="lobby hidden" style="margin-bottom:14px;">
+    <h2>Formación del Pueblo</h2>
+    <p id="setupDescription">Antes de empezar, el Pueblo puede reordenar su fila de Caballos y Peón (Fila 3) intercambiándola con la Fila 1 o la Fila 2.</p>
+    <div id="setupPreview" style="margin-bottom:14px;"></div>
+    <button class="action primary full" id="setupNoneBtn" onclick="chooseSetup('none')">Sin cambios</button>
+    <button class="action primary full" style="margin-top:8px;" id="setupRow1Btn" onclick="chooseSetup('row1')">Intercambiar Fila 3 ↔ Fila 1</button>
+    <button class="action primary full" style="margin-top:8px;" id="setupRow2Btn" onclick="chooseSetup('row2')">Intercambiar Fila 3 ↔ Fila 2</button>
+    <button class="action primary full" style="margin-top:14px;background:#16a34a;" id="setupConfirmBtn" onclick="confirmSetup()">Confirmar y empezar</button>
+    <p id="setupWaitingNote" class="waiting hidden" style="margin-top:10px;">El Pueblo está decidiendo su formación<span class="dots"></span></p>
+  </div>
 
   <div id="turnBanner" class="turn-banner pueblo">Turno del Pueblo</div>
   <div id="promoNotice" class="promo-notice" style="display:none;"></div>
@@ -365,6 +377,8 @@ let myRole = null;
 let unsubscribe = null;
 let mode = 'online'; // 'online' | 'local' | 'training'
 let aiLevel = 1;
+let phase = 'setup'; // 'setup' | 'playing'
+let setupChoice = 'none'; // 'none' | 'row1' | 'row2'
 
 // ---------- Mensajes en sobreimpresión ----------
 let lastTurn = null;
@@ -401,17 +415,28 @@ function resetMessageTracking() {
 }
 
 // ---------- Tablero ----------
-function initialBoard() {
+function initialBoard(setup = 'none') {
   const b = Array.from({ length: 8 }, () => Array(8).fill(null));
 
   // Corte (filas 8 y 7): Torres, Alfiles, Dama y el único Rey
   const row0 = ['R', null, 'B', 'Q', 'K', 'B', null, 'R']; // Fila 8
   const row1 = ['R', null, 'B', null, null, 'B', null, 'R']; // Fila 7
 
-  // Pueblo (filas 3, 2 y 1): Caballos, una Dama y Peones
-  const row5 = ['N', null, 'N', 'P', 'N', null, 'N', null]; // Fila 3
-  const row6 = ['P', 'P', 'P', 'Q', 'P', 'P', 'P', 'P'];     // Fila 2
-  const row7 = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'];     // Fila 1
+  // Pueblo: 3 filas predefinidas (índices de tablero 5, 6, 7 = Filas 3, 2, 1)
+  let rowFila3 = ['N', null, 'N', 'P', 'N', null, 'N', null]; // Caballos + Peón
+  let rowFila2 = ['P', 'P', 'P', 'Q', 'P', 'P', 'P', 'P'];     // Peones + Dama
+  let rowFila1 = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'];     // Peones
+
+  // Aplica el intercambio elegido por el Pueblo en la fase de preparación
+  if (setup === 'row1') {
+    [rowFila3, rowFila1] = [rowFila1, rowFila3];
+  } else if (setup === 'row2') {
+    [rowFila3, rowFila2] = [rowFila2, rowFila3];
+  }
+
+  const row5 = rowFila3; // se coloca en el índice de tablero 5 (Fila 3)
+  const row6 = rowFila2; // índice 6 (Fila 2)
+  const row7 = rowFila1; // índice 7 (Fila 1)
 
   for (let c = 0; c < 8; c++) {
     if (row0[c]) b[0][c] = { type: row0[c], owner: 'corte', color: c % 2 === 0 ? 'b' : 'w', moved: false };
@@ -517,7 +542,96 @@ function countByOwner(b, owner) {
   return n;
 }
 
-// ---------- Sala / Firebase ----------
+// ---------- Fase de preparación (formación del Pueblo) ----------
+const ROW_LABELS_PREVIEW = {
+  fila3: 'C . C P C . C .',
+  fila2: 'P P P D P P P P',
+  fila1: 'P P P P P P P P',
+};
+
+function renderSetupPreview() {
+  let f3 = ROW_LABELS_PREVIEW.fila3, f2 = ROW_LABELS_PREVIEW.fila2, f1 = ROW_LABELS_PREVIEW.fila1;
+  if (setupChoice === 'row1') { [f3, f1] = [f1, f3]; }
+  else if (setupChoice === 'row2') { [f3, f2] = [f2, f3]; }
+
+  const el = document.getElementById('setupPreview');
+  el.innerHTML = `
+    <div style="font-family:monospace;font-size:0.85rem;line-height:1.6;color:#d6d3d1;text-align:left;display:inline-block;">
+      <div>Fila 3: ${f3}</div>
+      <div>Fila 2: ${f2}</div>
+      <div>Fila 1: ${f1}</div>
+    </div>`;
+
+  for (const [key, btnId] of [['none','setupNoneBtn'],['row1','setupRow1Btn'],['row2','setupRow2Btn']]) {
+    const btn = document.getElementById(btnId);
+    btn.style.outline = (setupChoice === key) ? '2px solid var(--amber)' : 'none';
+  }
+}
+
+function chooseSetup(choice) {
+  if (mode === 'online' && myRole !== 'pueblo') return; // solo el Pueblo elige
+  setupChoice = choice;
+  if (mode === 'online') {
+    ROOMS.doc(roomCode).update({ setupChoice: choice, updatedAt: Date.now() });
+  } else {
+    renderSetupPreview();
+  }
+}
+
+function applySetupAndStart() {
+  board = initialBoard(setupChoice);
+  turn = 'pueblo';
+  selected = null;
+  legalMoves = [];
+  captured = { pueblo: [], corte: [] };
+  winner = null;
+  lastMove = null;
+  pendingPromotion = null;
+  phase = 'playing';
+}
+
+function confirmSetup() {
+  if (mode === 'online') {
+    if (myRole !== 'pueblo') return; // solo el Pueblo confirma
+    applySetupAndStart();
+    pushState();
+  } else {
+    applySetupAndStart();
+    resetMessageTracking();
+    render();
+  }
+}
+
+function showSetupScreen() {
+  phase = 'setup';
+  document.getElementById('setupScreen').classList.remove('hidden');
+  document.getElementById('turnBanner').style.display = 'none';
+  document.getElementById('board').parentElement.style.display = 'none';
+  document.querySelector('.captured').style.display = 'none';
+
+  const isPueblo = mode !== 'online' ? true : myRole === 'pueblo';
+  document.getElementById('setupNoneBtn').disabled = !isPueblo;
+  document.getElementById('setupRow1Btn').disabled = !isPueblo;
+  document.getElementById('setupRow2Btn').disabled = !isPueblo;
+  const confirmBtn = document.getElementById('setupConfirmBtn');
+  if (confirmBtn) confirmBtn.disabled = !isPueblo;
+  document.getElementById('setupWaitingNote').classList.toggle('hidden', isPueblo);
+
+  renderSetupPreview();
+}
+
+function hideSetupScreen() {
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('turnBanner').style.display = 'inline-block';
+  document.getElementById('board').parentElement.style.display = '';
+  document.querySelector('.captured').style.display = 'flex';
+}
+
+async function pushPhase() {
+  if (!roomCode) return;
+  await ROOMS.doc(roomCode).update({ phase: 'playing', updatedAt: Date.now() });
+}
+
 function genCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -534,6 +648,8 @@ async function createRoom() {
     winner: null,
     lastMove: null,
     players: { pueblo: true, corte: false },
+    phase: 'setup',
+    setupChoice: 'none',
     updatedAt: Date.now(),
   };
   await ROOMS.doc(code).set(initial);
@@ -586,6 +702,8 @@ function enterRoom(code) {
   unsubscribe = ROOMS.doc(code).onSnapshot(snap => {
     if (!snap.exists) return;
     const data = snap.data();
+    phase = data.phase || 'playing';
+    setupChoice = data.setupChoice || 'none';
     board = unflattenBoard(data.board);
     turn = data.turn;
     captured = data.captured || { pueblo: [], corte: [] };
@@ -599,7 +717,12 @@ function enterRoom(code) {
     const bothJoined = data.players && data.players.pueblo && data.players.corte;
     waiting.classList.toggle('hidden', !!bothJoined);
 
-    render();
+    if (phase === 'setup') {
+      showSetupScreen();
+    } else {
+      hideSetupScreen();
+      render();
+    }
   });
 }
 
@@ -607,16 +730,8 @@ function startLocal() {
   mode = 'local';
   myRole = null; // los dos bandos se controlan en el mismo dispositivo
   roomCode = null;
+  setupChoice = 'none';
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-
-  board = initialBoard();
-  turn = 'pueblo';
-  selected = null;
-  legalMoves = [];
-  captured = { pueblo: [], corte: [] };
-  winner = null;
-  lastMove = null;
-  pendingPromotion = null;
 
   document.getElementById('lobby').classList.add('hidden');
   document.getElementById('gameArea').classList.remove('hidden');
@@ -627,7 +742,7 @@ function startLocal() {
   modeInfo.innerHTML = '<span>Modo local — pasa el dispositivo entre turnos</span>';
 
   resetMessageTracking();
-  render();
+  showSetupScreen();
 }
 
 function startTraining() {
@@ -635,16 +750,8 @@ function startTraining() {
   myRole = 'pueblo'; // el jugador siempre controla al Pueblo
   roomCode = null;
   aiLevel = parseInt(document.getElementById('difficultySelect').value, 10) || 1;
+  setupChoice = 'none';
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-
-  board = initialBoard();
-  turn = 'pueblo';
-  selected = null;
-  legalMoves = [];
-  captured = { pueblo: [], corte: [] };
-  winner = null;
-  lastMove = null;
-  pendingPromotion = null;
 
   document.getElementById('lobby').classList.add('hidden');
   document.getElementById('gameArea').classList.remove('hidden');
@@ -655,7 +762,7 @@ function startTraining() {
   modeInfo.innerHTML = `<span>Entrenamiento (Nivel ${aiLevel}) — controlas al Pueblo, la IA juega la Corte</span>`;
 
   resetMessageTracking();
-  render();
+  showSetupScreen();
 }
 
 function exitToLobby() {
@@ -663,6 +770,7 @@ function exitToLobby() {
   roomCode = null;
   myRole = null;
   mode = 'online';
+  hideSetupScreen();
   document.getElementById('gameArea').classList.add('hidden');
   document.getElementById('lobby').classList.remove('hidden');
   document.getElementById('lobbyError').classList.add('hidden');
@@ -797,33 +905,28 @@ async function pushState() {
     captured,
     winner,
     lastMove,
+    phase,
     updatedAt: Date.now(),
   });
 }
 
 async function resetGame() {
-  const fresh = initialBoard();
   if (mode === 'online') {
-    if (!roomCode) return;
+    if (!roomCode || myRole !== 'pueblo') return; // solo el Pueblo puede reiniciar (evita conflictos)
     await ROOMS.doc(roomCode).update({
-      board: flattenBoard(fresh),
+      board: flattenBoard(initialBoard()),
       turn: 'pueblo',
       captured: { pueblo: [], corte: [] },
       winner: null,
       lastMove: null,
+      phase: 'setup',
+      setupChoice: 'none',
       updatedAt: Date.now(),
     });
   } else {
-    board = fresh;
-    turn = 'pueblo';
-    selected = null;
-    legalMoves = [];
-    captured = { pueblo: [], corte: [] };
-    winner = null;
-    lastMove = null;
-    pendingPromotion = null;
+    setupChoice = 'none';
     resetMessageTracking();
-    render();
+    showSetupScreen();
   }
 }
 
